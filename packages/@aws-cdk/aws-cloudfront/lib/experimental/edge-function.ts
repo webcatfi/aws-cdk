@@ -194,8 +194,8 @@ export class EdgeFunction extends Resource implements lambda.IVersion {
   }
 
   private edgeStack(): Stack {
-    const stage = this.node.root;
-    if (!stage || !Stage.isStage(stage)) {
+    const stage = Stage.of(this);
+    if (!stage) {
       throw new Error('stacks which use EdgeFunctions must be part of a CDK app or stage');
     }
     const region = this.env.region;
