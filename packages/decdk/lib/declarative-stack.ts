@@ -184,6 +184,11 @@ function deserializeValue(stack: cdk.Stack, typeRef: reflect.TypeReference, opti
     return enm;
   }
 
+  const fromArn = deconstructObjectFromArn(stack, typeRef, key, value);
+  if (fromArn) {
+    return fromArn;
+  }
+
   // if this is an interface, deserialize each property
   const ifc = deconstructInterface(stack, typeRef, key, value);
   if (ifc) {
@@ -220,6 +225,52 @@ function deconstructEnum(_stack: cdk.Stack, typeRef: reflect.TypeReference, _key
 
   const enumType = resolveType(typeRef.type.fqn);
   return enumType[value];
+}
+
+/**
+ * Support construct reference by ARN for any construct that has a static fromConstructArn() method.
+ * This works e.g. for Certificate, which has a Certificate.fromCertificateArn() method.
+ */
+function deconstructObjectFromArn(stack: cdk.Stack, typeRef: reflect.TypeReference, _key: string, value: any) {
+  // The value must be an object with a single arn attribute.
+  if (!(Object.keys(value).length === 1 && value.arn)) {
+    // Doesn't match the fromConstructArn syntax.
+    return undefined;
+  }
+
+  // Convert ICertificate => Certificate and xxx.yyy.ICertificate => xxx.yyy.Certificate
+  const constructTypeName = typeRef.type?.name.slice(1);
+  const constructTypeFqn = (typeRef.type?.assembly.fqn ? typeRef.type?.assembly.fqn + '.' : '') + (typeRef.type?.namespace ? typeRef.type?.namespace + '.' : '') + constructTypeName;
+  const constructTypeInfo = typeRef.system.findClass(constructTypeFqn);
+  if (!constructTypeInfo) {
+    // Couldn't find a matching construct class.
+    return undefined;
+  }
+
+  // Convert Certificate => fromCertificateArn
+  const fromArnMethodName = `from${constructTypeName}Arn`;
+
+  // Find the fromCertificateArn static method
+  const methods = constructTypeInfo.allMethods.filter(m => m.static && m.name === fromArnMethodName);
+  if (methods.length !== 1) {
+    // Couldn't find a matching fromConstructArn method
+    return undefined;
+  }
+  const method = methods[0];
+
+  // Found a fromConstructArn static method; now we can lookup the method function
+  const typeClass = resolveType(method.parentType.fqn);
+  const methodFn: (...args: any[]) => any = typeClass[method.name];
+  if (!methodFn) {
+    throw new Error(`Cannot find method named ${method.name} in ${typeClass.fqn}`);
+  }
+
+  // Generate a unique construct identifier for the fromConstructArn() call (do we have a better way to create a unique id?)
+  const constructRefId = `${constructTypeName}ArnRef${Math.floor(Math.random() * 1000000000)}`
+
+  // Arguments to the static method: scope, id, arn
+  const args = [stack, constructRefId, value.arn];
+  return methodFn.apply(typeClass, args);
 }
 
 function deconstructInterface(stack: cdk.Stack, typeRef: reflect.TypeReference, key: string, value: any) {

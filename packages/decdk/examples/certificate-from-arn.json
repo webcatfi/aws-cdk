@@ -1,0 +1,22 @@
+{
+  "$schema": "../cdk.schema.json",
+  "Resources": {
+    "MyDist": {
+      "Type": "@aws-cdk/aws-cloudfront.Distribution",
+      "Properties": {
+        "defaultBehavior": {
+          "compress": true,
+          "origin": {
+            "@aws-cdk/aws-cloudfront-origins.HttpOrigin": {
+              "domainName": "origin.example.org"
+            }
+          }
+        },
+        "certificate": {
+          "arn": "arn:aws:acm:us-east-1:xxxxxxxxxx:certificate/xxxxx-xxxxx-xxxxxx-xxxxxx"
+        },
+        "domainNames": ["example.org"]
+      }
+    }
+  }
+}
